@@ -167,13 +167,14 @@ main :: proc() {
 	}
 
 	//fetch
+	//
 	cpu.opcode = u16(Chip8memory[cpu.pc])
 	cpu.opcode <<= 8
 	cpu.opcode |= u16(Chip8memory[cpu.pc + 1])
 	cpu.pc += 2
 
 	//Decode
-	//TODO:Caien: make an array of funtion pointer
+	//TODO:Caien: make an array of funtion pointer intead of a switches from 0-E
 	switch (cpu.opcode) >> 12 {
 
 	//INFO: 0XONNN
@@ -336,7 +337,7 @@ main :: proc() {
 			Chip8memory[cpu.ir + 1] = tens_place
 			Chip8memory[cpu.ir + 2] = one_place
 		// for i := 0; i < 3; i += 1 {
-
+		//TODO:check why this errors
 		// Chip8memory[cpu.ir+1] = u8( u8(v_x / (10**i) % 10)
 
 		// }
