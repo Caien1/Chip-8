@@ -1,7 +1,10 @@
 #+feature dynamic-literals using-stmt
 package main
+import "core:bytes"
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:os"
 import rl "vendor:raylib"
 //memory and regset
 Chip8memory := [4096]u8{}
@@ -19,105 +22,105 @@ Chip8CPU :: struct {
 
 FontStartIndex :: 80
 Chip8Font := [80]u8 {
-	0xf0,
+	0xF0,
 	0x90,
 	0x90,
 	0x90,
-	0xf0, // 0
+	0xF0, // 0
 	0x20,
 	0x60,
 	0x20,
 	0x20,
 	0x70, // 1
-	0xf0,
+	0xF0,
 	0x10,
-	0xf0,
+	0xF0,
 	0x80,
-	0xf0, // 2
-	0xf0,
+	0xF0, // 2
+	0xF0,
 	0x10,
-	0xf0,
+	0xF0,
 	0x10,
-	0xf0, // 3
+	0xF0, // 3
 	0x90,
 	0x90,
-	0xf0,
+	0xF0,
 	0x10,
 	0x10, // 4
-	0xf0,
+	0xF0,
 	0x80,
-	0xf0,
+	0xF0,
 	0x10,
-	0xf0, // 5
-	0xf0,
+	0xF0, // 5
+	0xF0,
 	0x80,
-	0xf0,
+	0xF0,
 	0x90,
-	0xf0, // 6
-	0xf0,
+	0xF0, // 6
+	0xF0,
 	0x10,
 	0x20,
 	0x40,
 	0x40, // 7
-	0xf0,
+	0xF0,
 	0x90,
-	0xf0,
+	0xF0,
 	0x90,
-	0xf0, // 8
-	0xf0,
+	0xF0, // 8
+	0xF0,
 	0x90,
-	0xf0,
+	0xF0,
 	0x10,
-	0xf0, // 9
-	0xf0,
+	0xF0, // 9
+	0xF0,
 	0x90,
-	0xf0,
+	0xF0,
 	0x90,
 	0x90, // a
-	0xe0,
+	0xE0,
 	0x90,
-	0xe0,
+	0xE0,
 	0x90,
-	0xe0, // b
-	0xf0,
+	0xE0, // b
+	0xF0,
 	0x80,
 	0x80,
 	0x80,
-	0xf0, // c
-	0xe0,
+	0xF0, // c
+	0xE0,
 	0x90,
 	0x90,
 	0x90,
-	0xe0, // d
-	0xf0,
+	0xE0, // d
+	0xF0,
 	0x80,
-	0xf0,
+	0xF0,
 	0x80,
-	0xf0, // e
-	0xf0,
+	0xF0, // e
+	0xF0,
 	0x80,
-	0xf0,
+	0xF0,
 	0x80,
 	0x80, // f
 }
 
 chip8keyboard := map[rl.KeyboardKey]u8 {
-	rl.KeyboardKey.KP_0 = 0x00,
 	rl.KeyboardKey.KP_1 = 0x01,
 	rl.KeyboardKey.KP_2 = 0x02,
 	rl.KeyboardKey.KP_3 = 0x03,
-	rl.KeyboardKey.KP_4 = 0x04,
-	rl.KeyboardKey.Q    = 0x05,
-	rl.KeyboardKey.W    = 0x06,
-	rl.KeyboardKey.E    = 0x07,
-	rl.KeyboardKey.R    = 0x08,
-	rl.KeyboardKey.A    = 0x09,
-	rl.KeyboardKey.S    = 0x0A,
-	rl.KeyboardKey.D    = 0x0B,
-	rl.KeyboardKey.F    = 0x0C,
-	rl.KeyboardKey.Z    = 0x0D,
-	rl.KeyboardKey.X    = 0x0E,
-	rl.KeyboardKey.C    = 0x0F,
+	rl.KeyboardKey.KP_4 = 0x0C,
+	rl.KeyboardKey.Q    = 0x04,
+	rl.KeyboardKey.W    = 0x05,
+	rl.KeyboardKey.E    = 0x06,
+	rl.KeyboardKey.R    = 0x0D,
+	rl.KeyboardKey.A    = 0x07,
+	rl.KeyboardKey.S    = 0x08,
+	rl.KeyboardKey.D    = 0x09,
+	rl.KeyboardKey.F    = 0x0E,
+	rl.KeyboardKey.Z    = 0x0A,
+	rl.KeyboardKey.X    = 0x00,
+	rl.KeyboardKey.C    = 0x0B,
+	rl.KeyboardKey.V    = 0x0F,
 }
 
 
@@ -147,40 +150,49 @@ init_Chip8 :: proc() {
 }
 
 
-display_sprite :: proc(x: u8, y: u8, length: u8, byte_addr: u32) {
+draw_sprite :: proc(x: u8, y: u8, length: u8, byte_addr_start: u16, cpu: ^^Chip8CPU) {
+	// TODO: check whether len is 15
+	assert(length <= 15)
 
+	for i: u8 = 0; i < length; i += 1 {
+		for j: u8 = 0; j < 8; j += 1 {
+			pixel: u8 = (Chip8memory[byte_addr_start + u16(i)] << j) >> (7)
+			if (Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] == pixel &&
+				   Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] == 0x1) { 	//TODO fix the carry bit is set in both cases
+				cpu^.data_reg[15] = 0x1 // set carry reg
+			}
+
+			Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] ~=
+				(Chip8memory[byte_addr_start + u16(i)] << j) >> (7)
+		}
+	}
 
 }
 
+fetch_instruction :: proc(cpu: ^Chip8CPU) {
 
-main :: proc() {
-	//INFO:Init CPU
-	cpu := Chip8CPU{}
-	cpu.pc = 0x200
-
-	Chip8memory[cpu.pc] = 0x01
-	Chip8memory[cpu.pc + 1] = 0x01
-
-	//INFO:Loading Chip 8 font sprites
-	for i := 0; i < len(Chip8Font); i += 1 {
-		Chip8memory[FontStartIndex + i] = Chip8Font[i]
-	}
-
-	//fetch
-	//
 	cpu.opcode = u16(Chip8memory[cpu.pc])
 	cpu.opcode <<= 8
 	cpu.opcode |= u16(Chip8memory[cpu.pc + 1])
 	cpu.pc += 2
 
-	//Decode
-	//TODO:Caien: make an array of funtion pointer intead of a switches from 0-E
+}
+
+decode_and_execute :: proc(cpu: ^Chip8CPU) {
 	switch (cpu.opcode) >> 12 {
 
 	//INFO: 0XONNN
 	case 0x0:
 		if cpu.opcode == 0x00E0 {
 			//ClearDisplay
+			for i := 0; i < FrameBufferWidth; i += 1 {
+				for j := 0; i < FrameBufferHeight; i += 1 {
+					Chip8FrameBuffer[i][j] = 0
+					// Chip8FrameBuffer[i][j] &= 0x0000
+					//TODO: check which one is faster
+				}
+			}
+
 		} else {
 			cpu.pc = cpu.stack[cpu.sp]
 			cpu.sp -= 1
@@ -219,58 +231,58 @@ main :: proc() {
 
 		//INFO: 0X8__N type ins here N is unique so i used the filter 0x000F to distinguish
 		case 0x0:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] = cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
 		case 0x1:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
-				cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] | cpu.data_reg[(cpu.opcode & 0x0f00) >> 8]
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] | cpu.data_reg[(cpu.opcode & 0x0F00) >> 8]
 		case 0x2:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] & cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] & cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
 		case 0x3:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] ~ cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] ~ cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
 		case 0x4:
 			cpu.data_reg[0xF] =
-				(cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] + cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]) > 255 ? (0x01) : (0x00)
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+				(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] + cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]) > 255 ? (0x01) : (0x00)
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 				(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] +
 					cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]) &
 				0x00FF
 		case 0x5:
-			if cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] >
+			if cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] >
 			   cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] {
 				cpu.data_reg[0x0F] = 0x01
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 					(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] -
 						cpu.data_reg[(cpu.opcode & 0x00F0) >> 4])
 			} else {
 				cpu.data_reg[0x0F] = 0x00
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 					cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] -
 					cpu.data_reg[(cpu.opcode & 0x0F00) >> 8]
 			}
 
 		case 0x6:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 				cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] >> 1
 			cpu.data_reg[0xF] = cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] & 0x0001
 
 		case 0x7:
-			if cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] <
+			if cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] <
 			   cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] {
 				cpu.data_reg[0x0F] = 0x01
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 					(cpu.data_reg[(cpu.opcode & 0x0F00) >> 4] -
 						cpu.data_reg[(cpu.opcode & 0x00F0) >> 8])
 			} else {
 				cpu.data_reg[0x0F] = 0x00
-				cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 					cpu.data_reg[(cpu.opcode & 0x00F0) >> 8] -
 					cpu.data_reg[(cpu.opcode & 0x0F00) >> 4]
 			}
 
 		case 0xE:
-			cpu.data_reg[(cpu.opcode & 0x0f00) >> 8] =
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
 				(cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] << 1)
 			cpu.data_reg[0xF] = (cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] >> 15)
 		}
@@ -298,15 +310,30 @@ main :: proc() {
 	case 0xD:
 		position_x := cpu.data_reg[(cpu.opcode & 0x0F00) >> 8]
 		position_y := cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
-		sprite_len := cpu.opcode & 0x000F
+		sprite_len := u8(cpu.opcode & 0x000F)
+		//TODO: figure why i have to make a local var
+		//clean and change the double pointer
+		cpu_ptr := cpu
+		draw_sprite(position_x, position_y, sprite_len, cpu.ir, &cpu_ptr)
 
 
 	case 0xE:
-		//TODO: these rely on keyboard inputs implement it first
+		//TODO: Make key input buffer
 		subcase := cpu.opcode & 0x00FF
+		keyPressed: u8 = 0
 		switch subcase {
+
 		case 0x9E:
+			if (cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] == keyPressed) {
+
+				cpu.pc += 2
+			}
 		case 0xA1:
+			if (cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] != keyPressed) {
+
+				cpu.pc += 2
+
+			}
 		}
 
 	case 0xF:
@@ -316,7 +343,8 @@ main :: proc() {
 		case 0x07:
 			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = cpu.delay
 		case 0x0A:
-		//TODO: Implement key
+		//TODO: Not implemented yet
+
 
 		case 0x15:
 			cpu.delay = cpu.data_reg[(cpu.opcode & 0x0F00) >> 8]
@@ -325,9 +353,10 @@ main :: proc() {
 		case 0x1E:
 			cpu.ir += u16(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8])
 		case 0x29:
-		//TODO: Relies on sprite stuff
+			cpu.ir = u16(FontStartIndex) + u16(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] * 5) + 1
 
 		case 0x33:
+			//TEST:
 			v_x := cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] // this is 8 bit 0 - 255 so
 			one_place := u8(v_x % 10)
 			tens_place := u8((v_x / 10) % 10)
@@ -352,10 +381,31 @@ main :: proc() {
 			for i: u16 = 0; i <= (cpu.opcode & 0x0F00) >> 8; i += 1 {
 				cpu.data_reg[i] = Chip8memory[cpu.ir]
 			}
-
 			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8) + 1
 
 		}
+	}
+}
+
+
+main :: proc() {
+	//INFO:Init CPU
+	cpu := Chip8CPU{}
+	cpu.pc = 0x200
+
+	//INFO:Loading Chip 8 font sprites
+	for i := 0; i < len(Chip8Font); i += 1 {
+		Chip8memory[FontStartIndex + i] = Chip8Font[i]
+	}
+
+
+	data, err := os.read_entire_file_from_path("./ibm.ch8", context.allocator)
+	fmt.print(data)
+	if err != nil {
+	}
+
+	for i := 0; i < len(data); i += 1 {
+		Chip8memory[i + 0x200] = data[i]
 	}
 
 	//INFO: Raylib Initialisation
@@ -363,9 +413,19 @@ main :: proc() {
 	screenHeight :: 720
 	FPS :: 60
 	rl.SetTargetFPS(FPS)
+	cpu_ptr := &cpu
+	// draw_sprite(10, 10, 5, 105, &cpu_ptr)
+	// draw_sprite(15, 10, 5, 85, &cpu_ptr)
+	// draw_sprite(21, 10, 5, 90, &cpu_ptr)
+
 
 	rl.InitWindow(screenWidth, screenHeight, "Chip8")
 	for !rl.WindowShouldClose() {
+
+		fetch_instruction(&cpu)
+		decode_and_execute(&cpu)
+
+
 		//INFO: Temporary block for debuggin
 		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) &&
 		   rl.CheckCollisionPointRec(rl.GetMousePosition(), Chip8Display) {
@@ -386,7 +446,7 @@ main :: proc() {
 						i32(f32(j) * height_per_cell + Chip8Display.y),
 						i32(width_per_cell),
 						i32(height_per_cell),
-						rl.GRAY,
+						rl.BLACK,
 					)
 				}
 			}
