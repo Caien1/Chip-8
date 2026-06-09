@@ -8,7 +8,7 @@ import rl "vendor:raylib"
 Chip8memory := [4096]u8{}
 
 Chip8CPU :: struct {
-	stack:    [16]u16,
+	stack:    [34]u16,
 	data_reg: [16]u8,
 	ir:       u16,
 	pc:       u16,
@@ -104,22 +104,22 @@ Chip8Font := [80]u8 {
 }
 
 chip8keyboard := map[rl.KeyboardKey]u8 {
-	rl.KeyboardKey.KP_1 = 0x01,
-	rl.KeyboardKey.KP_2 = 0x02,
-	rl.KeyboardKey.KP_3 = 0x03,
-	rl.KeyboardKey.KP_4 = 0x0C,
-	rl.KeyboardKey.Q    = 0x04,
-	rl.KeyboardKey.W    = 0x05,
-	rl.KeyboardKey.E    = 0x06,
-	rl.KeyboardKey.R    = 0x0D,
-	rl.KeyboardKey.A    = 0x07,
-	rl.KeyboardKey.S    = 0x08,
-	rl.KeyboardKey.D    = 0x09,
-	rl.KeyboardKey.F    = 0x0E,
-	rl.KeyboardKey.Z    = 0x0A,
-	rl.KeyboardKey.X    = 0x00,
-	rl.KeyboardKey.C    = 0x0B,
-	rl.KeyboardKey.V    = 0x0F,
+	rl.KeyboardKey.KP_1 = 0x2,
+	rl.KeyboardKey.KP_2 = 0x2,
+	rl.KeyboardKey.KP_3 = 0x3,
+	rl.KeyboardKey.KP_4 = 0xC,
+	rl.KeyboardKey.Q    = 0x4,
+	rl.KeyboardKey.W    = 0x5,
+	rl.KeyboardKey.E    = 0x6,
+	rl.KeyboardKey.R    = 0xD,
+	rl.KeyboardKey.A    = 0x7,
+	rl.KeyboardKey.S    = 0x8,
+	rl.KeyboardKey.D    = 0x9,
+	rl.KeyboardKey.F    = 0xE,
+	rl.KeyboardKey.Z    = 0xA,
+	rl.KeyboardKey.X    = 0x0,
+	rl.KeyboardKey.C    = 0xB,
+	rl.KeyboardKey.V    = 0xF,
 }
 
 
@@ -250,15 +250,11 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 			if cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] >
 			   cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] {
 				cpu.data_reg[0x0F] = 0x01
-				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
-					(cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] -
-						cpu.data_reg[(cpu.opcode & 0x00F0) >> 4])
 			} else {
 				cpu.data_reg[0x0F] = 0x00
-				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
-					cpu.data_reg[(cpu.opcode & 0x00F0) >> 4] -
-					cpu.data_reg[(cpu.opcode & 0x0F00) >> 8]
 			}
+			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] -= cpu.data_reg[(cpu.opcode & 0x00F0) >> 4]
+
 
 		case 0x6:
 			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] =
@@ -297,6 +293,7 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 
 	case 0xB:
 		//INFO: 0XBNNN
+		//
 		cpu.pc = u16(cpu.data_reg[0x0]) + cpu.opcode & 0x0fff
 
 	case 0xC:
@@ -341,7 +338,15 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 		case 0x07:
 			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = cpu.delay
 		case 0x0A:
-		//TODO: Not implemented yet
+			//INFO: This halts the execution of the program
+			for {
+				key := rl.GetKeyPressed()
+				if (key in chip8keyboard) {
+
+					cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = chip8keyboard[key]
+					break
+				}
+			}
 
 
 		case 0x15:
@@ -371,15 +376,15 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 
 		case 0x55:
 			for i: u16 = 0; i <= (cpu.opcode & 0x0F00) >> 8; i += 1 {
-				Chip8memory[cpu.ir] = cpu.data_reg[i]
+				Chip8memory[cpu.ir + i] = cpu.data_reg[i]
 			}
-			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8) + 1
 
+			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8)
 		case 0x65:
 			for i: u16 = 0; i <= (cpu.opcode & 0x0F00) >> 8; i += 1 {
-				cpu.data_reg[i] = Chip8memory[cpu.ir]
+				cpu.data_reg[i] = Chip8memory[cpu.ir + i]
 			}
-			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8) + 1
+			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8)
 
 		}
 	}
@@ -430,6 +435,14 @@ main :: proc() {
 
 	rl.InitWindow(screenWidth, screenHeight, "Chip8")
 	for !rl.WindowShouldClose() {
+		if (cpu.delay > 0) {
+			cpu.delay -= 1
+		}
+		if (cpu.sr > 0) {
+
+			cpu.delay -= 1
+		}
+
 
 		fetch_instruction(&cpu)
 		decode_and_execute(&cpu)
