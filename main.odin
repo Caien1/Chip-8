@@ -1,7 +1,5 @@
 #+feature dynamic-literals using-stmt
 package main
-import "core:bytes"
-import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:os"
@@ -19,6 +17,7 @@ Chip8CPU :: struct {
 	delay:    u8,
 	opcode:   u16,
 }
+
 
 FontStartIndex :: 80
 Chip8Font := [80]u8 {
@@ -159,7 +158,7 @@ draw_sprite :: proc(x: u8, y: u8, length: u8, byte_addr_start: u16, cpu: ^^Chip8
 			pixel: u8 = (Chip8memory[byte_addr_start + u16(i)] << j) >> (7)
 			if (Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] == pixel &&
 				   Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] == 0x1) { 	//TODO fix the carry bit is set in both cases
-				cpu^.data_reg[15] = 0x1 // set carry reg
+				cpu^.data_reg[0xF] = 0x1 // set carry reg
 			}
 
 			Chip8FrameBuffer[(x + j) % 64][(y + i) % 32] ~=
@@ -170,7 +169,6 @@ draw_sprite :: proc(x: u8, y: u8, length: u8, byte_addr_start: u16, cpu: ^^Chip8
 }
 
 fetch_instruction :: proc(cpu: ^Chip8CPU) {
-
 	cpu.opcode = u16(Chip8memory[cpu.pc])
 	cpu.opcode <<= 8
 	cpu.opcode |= u16(Chip8memory[cpu.pc + 1])
@@ -389,9 +387,32 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 
 
 main :: proc() {
+
+
 	//INFO:Init CPU
 	cpu := Chip8CPU{}
 	cpu.pc = 0x200
+	rom_loaded: b8 = true
+
+	if (os.args[1] == "") {
+		assert(false, "No roms supplied")
+		os.exit(1)
+	}
+
+	data, err := os.read_entire_file_from_path(os.args[1], context.allocator)
+
+	for i := 0; i < len(data); i += 1 {
+		Chip8memory[i + 0x200] = data[i]
+	}
+
+
+	if err != nil {
+		rom_loaded = false
+		assert(rom_loaded == false, "Rom not valid")
+
+
+	}
+
 
 	//INFO:Loading Chip 8 font sprites
 	for i := 0; i < len(Chip8Font); i += 1 {
@@ -399,24 +420,12 @@ main :: proc() {
 	}
 
 
-	data, err := os.read_entire_file_from_path("./ibm.ch8", context.allocator)
-	fmt.print(data)
-	if err != nil {
-	}
-
-	for i := 0; i < len(data); i += 1 {
-		Chip8memory[i + 0x200] = data[i]
-	}
-
 	//INFO: Raylib Initialisation
 	screenWidth :: 1280
 	screenHeight :: 720
 	FPS :: 60
 	rl.SetTargetFPS(FPS)
 	cpu_ptr := &cpu
-	// draw_sprite(10, 10, 5, 105, &cpu_ptr)
-	// draw_sprite(15, 10, 5, 85, &cpu_ptr)
-	// draw_sprite(21, 10, 5, 90, &cpu_ptr)
 
 
 	rl.InitWindow(screenWidth, screenHeight, "Chip8")
@@ -427,13 +436,13 @@ main :: proc() {
 
 
 		//INFO: Temporary block for debuggin
-		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) &&
-		   rl.CheckCollisionPointRec(rl.GetMousePosition(), Chip8Display) {
-			x_relative_to_display := rl.GetMousePosition().x - Chip8Display.x
-			y_relative_to_display := rl.GetMousePosition().y - Chip8Display.y
-			map_display_to_buffer(x_relative_to_display, y_relative_to_display)
-		}
-
+		// if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) &&
+		//    rl.CheckCollisionPointRec(rl.GetMousePosition(), Chip8Display) {
+		// 	x_relative_to_display := rl.GetMousePosition().x - Chip8Display.x
+		// 	y_relative_to_display := rl.GetMousePosition().y - Chip8Display.y
+		// 	map_display_to_buffer(x_relative_to_display, y_relative_to_display)
+		// }
+		//
 		rl.BeginDrawing()
 		rl.DrawFPS(0, 0)
 		rl.DrawRectangleRec(Chip8Display, rl.RAYWHITE)
