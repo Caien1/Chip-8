@@ -1,5 +1,6 @@
 #+feature dynamic-literals using-stmt
 package main
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:os"
@@ -191,7 +192,8 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 				}
 			}
 
-		} else {
+		}
+		if cpu.opcode == 0x00EE {
 			cpu.pc = cpu.stack[cpu.sp]
 			cpu.sp -= 1
 		}
@@ -202,6 +204,7 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 		//INFO: 0X2NNN
 		cpu.sp += 1
 		cpu.stack[cpu.sp] = cpu.pc
+		cpu.pc = (cpu.opcode & 0x0FFF)
 	case 0x3:
 		//INFO: 0X3NNN
 		if cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] == u8(cpu.opcode & 0x00FF) {
@@ -289,7 +292,7 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 
 	case 0xA:
 		//INFO: 0XANNN
-		cpu.ir = cpu.opcode & 0x0FFF
+		cpu.ir = (cpu.opcode & 0x0FFF)
 
 	case 0xB:
 		//INFO: 0XBNNN
@@ -315,17 +318,22 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 	case 0xE:
 		//TODO: Make key input buffer
 		subcase := cpu.opcode & 0x00FF
-		keyPressed: u8 = 0
+		key := rl.GetKeyPressed()
+
+		keyPressed: u8 = 0x10
+		if (key in chip8keyboard) {
+			keyPressed = chip8keyboard[key]
+			fmt.print(key)
+
+		}
 		switch subcase {
 
 		case 0x9E:
 			if (cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] == keyPressed) {
-
 				cpu.pc += 2
 			}
 		case 0xA1:
 			if (cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] != keyPressed) {
-
 				cpu.pc += 2
 
 			}
@@ -339,13 +347,12 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 			cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = cpu.delay
 		case 0x0A:
 			//INFO: This halts the execution of the program
-			for {
-				key := rl.GetKeyPressed()
-				if (key in chip8keyboard) {
+			key := rl.GetKeyPressed()
+			if (key in chip8keyboard) {
 
-					cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = chip8keyboard[key]
-					break
-				}
+				cpu.data_reg[(cpu.opcode & 0x0F00) >> 8] = chip8keyboard[key]
+			} else {
+				cpu.pc -= 2
 			}
 
 
@@ -379,12 +386,12 @@ decode_and_execute :: proc(cpu: ^Chip8CPU) {
 				Chip8memory[cpu.ir + i] = cpu.data_reg[i]
 			}
 
-			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8)
+			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8) + 1
 		case 0x65:
 			for i: u16 = 0; i <= (cpu.opcode & 0x0F00) >> 8; i += 1 {
 				cpu.data_reg[i] = Chip8memory[cpu.ir + i]
 			}
-			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8)
+			cpu.ir += u16((cpu.opcode & 0x0F00) >> 8) + 1 // manual says i+x + 1 but the test states otherwise
 
 		}
 	}
